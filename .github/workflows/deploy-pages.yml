@@ -27,13 +27,12 @@ jobs:
         run: |
           node --check script.js
           node --check app-core.js
-          node --check analytics-consent.js
           node --check service-worker.js
           node --check pwa.js
       - name: Prepare public files
         run: |
           mkdir _site
-          cp index.html privacy.html styles.css script.js app-core.js analytics-consent.js firebase-config.js pwa.js service-worker.js manifest.json CNAME .nojekyll _site/
+          cp index.html privacy.html styles.css script.js app-core.js pwa.js service-worker.js manifest.json CNAME .nojekyll _site/
           cp -R images _site/images
       - uses: actions/upload-pages-artifact@v3
         if: github.event_name != 'pull_request'

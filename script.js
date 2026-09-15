@@ -96,14 +96,6 @@ function element(tag, options = {}, children = []) {
   return node;
 }
 
-function track(name, params = {}) {
-  try {
-    window.loteriaTrack?.(name, params);
-  } catch {
-    // Analytics must never interrupt the app.
-  }
-}
-
 function init() {
   try {
     localStorageHandle = window.localStorage;
@@ -233,7 +225,6 @@ function switchTab(tab) {
     button.removeAttribute('aria-current');
     if (active) button.setAttribute('aria-current', 'page');
   });
-  track('select_content', { content_type: 'tab', item_id: tab });
   renderAll();
   window.scrollTo({ top: 0, left: 0 });
 }
@@ -256,7 +247,6 @@ function switchLottery(lottery) {
   populateYearInput();
   restoreDraft();
   renderAll();
-  track('select_content', { content_type: 'lottery', item_id: lottery });
   if (!state.bundles[lottery] && !state.load[lottery].loading) void loadData(lottery);
 }
 
@@ -343,11 +333,6 @@ function handleTicketSubmit(event) {
     populateYearInput();
     renderAll();
     showTicketResult(ticket);
-    track(wasEditing ? 'ticket_updated' : 'ticket_saved', {
-      lottery: ticket.lottery,
-      draw_year: ticket.drawYear,
-      created: result.created === false ? 0 : 1,
-    });
   } catch (error) {
     handleActionError(error);
   }
@@ -440,7 +425,6 @@ function handleHistoryAction(event) {
     state.tickets = documentState.tickets;
     renderAll();
     toast('Décimo eliminado');
-    track('ticket_deleted', { lottery: ticket.lottery, draw_year: ticket.drawYear ?? 0 });
   } catch (error) {
     handleActionError(error);
   }
@@ -458,7 +442,6 @@ function deleteVisibleTickets() {
     state.tickets = documentState.tickets;
     renderAll();
     toast('Décimos del año eliminados');
-    track('tickets_deleted', { lottery: state.lottery, draw_year: selectedYear(), count });
   } catch (error) {
     handleActionError(error);
   }
@@ -697,7 +680,6 @@ function exportBackup() {
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
     toast(`Copia creada con ${state.tickets.length} ${state.tickets.length === 1 ? 'décimo' : 'décimos'}.`);
-    track('backup_exported', { count: state.tickets.length });
   } catch (error) {
     handleActionError(error);
   }
@@ -717,7 +699,6 @@ async function handleImportFile(event) {
     renderAll();
     const ignored = result.warnings.length ? ` ${result.warnings.length} filas antiguas no válidas se omitieron.` : '';
     showModal('Importación terminada', `${result.added} décimos añadidos y ${result.skipped} ya existentes.${ignored}`, 'success');
-    track('backup_imported', { added: result.added, skipped: result.skipped });
   } catch (error) {
     handleActionError(error, 'No se pudo importar la copia');
   }
@@ -805,7 +786,6 @@ function showContact(person) {
   }
   modal.hidden = false;
   byId('modalClose')?.focus();
-  track('select_content', { content_type: 'contact', item_id: person });
 }
 
 function openExternal(url) {

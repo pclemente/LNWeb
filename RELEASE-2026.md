@@ -20,9 +20,9 @@ Revisión realizada el 15 de septiembre de 2026. Web: `pclemente/LNWeb`; app iOS
 | Siri | Atajo para abrir el histórico | **No disponible** en la web |
 | Donaciones mediante StoreKit | Función nativa | No se traslada como compra web |
 | Apariencia | UIKit, tema del sistema | Diseño adaptable oscuro, foco visible y movimiento reducido |
-| Telemetría | Proyecto Firebase retirado | Proyecto web nuevo; consentimiento previo y eventos sin números ni notas |
+| Telemetría | Firebase Analytics solo para estadísticas de iOS | Sin analítica ni SDK de Firebase |
 
-Firebase no almacenaba los décimos de iOS: su uso era Analytics. La colección nativa se conserva en UserDefaults/iCloud. Cambiar el proyecto Firebase no traslada esa colección ni sustituye iCloud.
+Firebase se usa únicamente para estadísticas de iOS y no almacena los décimos. La colección nativa se conserva en UserDefaults/iCloud. La web no carga Firebase, y Firebase no traslada esa colección ni sustituye iCloud.
 
 ## Errores corregidos
 
@@ -33,7 +33,7 @@ Firebase no almacenaba los décimos de iOS: su uso era Analytics. La colección 
 - El guardado exige persistencia correcta; no se anuncia éxito si falta almacenamiento.
 - Los registros antiguos conservan año pendiente, en lugar de recibir un año inventado. Se conservan importes cero para revisión y notas de hasta 5.000 caracteres, sin truncarlas.
 - Importar una copia no reemplaza toda la colección ni duplica una copia idéntica. Conserva también varias participaciones con el mismo número, importe y nota. Las copias de hasta 10 MB se validan antes de intentar guardarlas.
-- Las estadísticas modulares usan la API correcta y no recogen búsquedas ni datos de la colección.
+- Se retiraron Firebase y la analítica de la web; sus números y su navegación no se envían a ese servicio.
 - La interfaz dejó de anunciar «datos en directo» sin verificarlo.
 
 ## Situación real del servicio de resultados
@@ -50,8 +50,8 @@ Al revisar los endpoints HTTPS de producción:
 1. Reparar y contrastar la lista completa de El Niño 2026 con SELAE, incluyendo el primer premio ausente. No basta con copiar el primer número del resumen: hay que comprobar importes y premios acumulables.
 2. Preparar snapshots versionados de Navidad 2026 y El Niño 2027: `lottery`, `drawYear`, `generatedAt`, estado, origen y huella común en números/resumen/estado. Publicación atómica después de validar todas las páginas, HTTPS con certificados válidos, timeout y reintentos acotados. Conservar la última publicación válida si falla la extracción.
 3. Antes del sorteo, publicar el estado «no comenzado» con el año explícito, sin reasignar los resultados antiguos a 2026. Al empezar, probar el recorrido de estados 0 → 1 → 2 → 3 → 4 contra una fuente autorizada. Archivar los años anteriores.
-4. Para equivalencia con iCloud, diseñar e implementar cuentas y sincronización con Firebase Authentication/Firestore: proveedores de acceso, reglas por propietario, conflictos, borrados sincronizados, operación offline, exportación y borrado de cuenta. El código actual no despliega una base de datos ni reglas abiertas.
-5. Completar el registro iOS en Firebase `loterianavidad-2e7a2`, descargar el plist nativo para el bundle correcto y verificar la firma/App Store Connect. La configuración web no puede usarse como plist de iOS.
+4. Para equivalencia con iCloud, diseñar un servicio de cuentas y sincronización independiente: acceso, aislamiento por propietario, conflictos, borrados sincronizados, operación offline, exportación y borrado de cuenta. La web actual no incluye ese servicio.
+5. Mantener la configuración de Firebase Analytics exclusivamente en iOS para el bundle correcto y verificar la firma/App Store Connect. La web no utiliza ni publica configuración de Firebase.
 
 ## Comprobación de esta publicación
 
