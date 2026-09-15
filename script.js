@@ -75,6 +75,7 @@ const state = {
 let repository;
 let localStorageHandle;
 let toastTimer;
+let modalFocusReturn;
 
 const byId = (id) => document.getElementById(id);
 const all = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -165,7 +166,20 @@ function bindEvents() {
     if (event.target === byId('modal')) closeModal();
   });
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && byId('modal') && !byId('modal').hidden) closeModal();
+    const modal = byId('modal');
+    if (!modal || modal.hidden) return;
+    if (event.key === 'Escape') { event.preventDefault(); closeModal(); }
+    if (event.key === 'Tab') {
+      const focusable = [...modal.querySelectorAll('button, a[href], input, select, textarea, [tabindex="0"]')]
+        .filter(node => !node.disabled && node.getClientRects().length > 0);
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !modal.contains(document.activeElement))) {
+        event.preventDefault(); last?.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !modal.contains(document.activeElement))) {
+        event.preventDefault(); first?.focus();
+      }
+    }
   });
   window.addEventListener('online', () => void loadData(state.lottery, { announce: true }));
   window.addEventListener('storage', handleStorageChange);
@@ -681,7 +695,7 @@ function exportBackup() {
     document.body.append(link);
     link.click();
     link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
     toast(`Copia creada con ${state.tickets.length} ${state.tickets.length === 1 ? 'décimo' : 'décimos'}.`);
     track('backup_exported', { count: state.tickets.length });
   } catch (error) {
@@ -773,6 +787,7 @@ function showContact(person) {
   if (!contact) return;
   const modal = byId('modal');
   if (!modal) return;
+  if (modal.hidden) modalFocusReturn = document.activeElement;
   modal.classList.add('contact-mode');
   if (byId('modalIcon')) byId('modalIcon').textContent = '♡';
   if (byId('modalTitle')) byId('modalTitle').textContent = `Contactar con ${contact.name}`;
@@ -789,6 +804,7 @@ function showContact(person) {
     options.hidden = false;
   }
   modal.hidden = false;
+  byId('modalClose')?.focus();
   track('select_content', { content_type: 'contact', item_id: person });
 }
 
@@ -808,6 +824,7 @@ function toast(message) {
 function showModal(title, message, type = 'info') {
   const modal = byId('modal');
   if (!modal) return toast(`${title}: ${message}`);
+  if (modal.hidden) modalFocusReturn = document.activeElement;
   modal.classList.remove('contact-mode');
   const options = byId('contactOptions');
   if (options) options.hidden = true;
@@ -825,6 +842,8 @@ function closeModal() {
   const options = byId('contactOptions');
   if (options) options.hidden = true;
   modal.hidden = true;
+  if (modalFocusReturn?.isConnected) modalFocusReturn.focus();
+  modalFocusReturn = null;
 }
 
 function showStorageProblem() {
