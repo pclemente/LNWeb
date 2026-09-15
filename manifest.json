@@ -1,24 +1,27 @@
 {
-  "name": "Lotería de Navidad y El Niño",
-  "short_name": "Lotería",
-  "description": "Comprueba tus números de la Lotería de Navidad y El Niño en tiempo real",
-  "start_url": ".",
+  "name": "Mi Lotería · Navidad y El Niño",
+  "short_name": "Mi Lotería",
+  "description": "Guarda tus décimos y participaciones de Navidad 2026 y El Niño. Exporta tu colección y consulta los premios.",
+  "start_url": "./",
   "display": "standalone",
-  "background_color": "#F2F2F7",
-  "theme_color": "#007AFF",
-  "orientation": "portrait",
+  "background_color": "#0b2428",
+  "theme_color": "#0b2428",
+  "orientation": "any",
   "icons": [
     {
       "src": "images/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
       "src": "images/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     }
-  ]
+  ],
+  "id": "/",
+  "scope": "./",
+  "lang": "es"
 }

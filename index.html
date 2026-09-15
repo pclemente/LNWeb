@@ -3,76 +3,66 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="description" content="Comprueba tus números de la Lotería de Navidad y El Niño en tiempo real.">
-  <meta name="theme-color" content="#071b2b">
+  <meta name="description" content="Lotería de Navidad 2026 y El Niño. Guarda tus décimos y participaciones, consulta los premios y lleva una copia de tus números a cualquier dispositivo.">
+  <meta name="theme-color" content="#0b2428">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Lotería">
-  <title>Lotería · Comprueba tu suerte</title>
+  <meta name="apple-mobile-web-app-title" content="Mi Lotería">
+  <title>Lotería de Navidad 2026 · Tus números, contigo</title>
+  <link rel="canonical" href="https://loterianavidad.pabloclementeperez.com/">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="images/icon-192.png">
   <link rel="apple-touch-icon" href="images/icon-192.png">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <script src="firebase-config.js"></script>
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
-    import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-analytics.js";
-    try {
-      const app = initializeApp(window.LOTERIA_FIREBASE_CONFIG);
-      window.loteriaAnalytics = getAnalytics(app);
-      window.dispatchEvent(new Event('firebase-ready'));
-    } catch (error) {
-      console.info('Firebase Analytics unavailable', error);
-    }
-  </script>
+  <script src="firebase-config.js" defer></script>
+  <script src="analytics-consent.js" defer></script>
 </head>
 <body>
-  <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
+  <a class="skip-link" href="#main">Saltar al contenido</a>
   <header class="topbar">
-    <a class="brand" href="#buscar" aria-label="Ir a Buscar"><img class="brand-icon" src="images/icon-192.png" width="40" height="40" alt=""><span><strong>Lotería</strong><small>Navidad · El Niño</small></span></a>
-    <div class="lottery-switch header-lottery-switch" role="tablist" aria-label="Tipo de sorteo"><button class="lottery-choice active" data-lottery="navidad" role="tab">Navidad <small>22 DIC</small></button><button class="lottery-choice" data-lottery="nino" role="tab">El Niño <small>06 ENE</small></button></div>
-    <div class="top-actions"><button class="share-button" id="shareBtn" aria-label="Compartir esta web" title="Compartir esta web"><span>Compartir</span><b>↗</b></button><span class="live-pill"><i></i> Datos en directo</span></div>
+    <a class="brand" href="#buscar" aria-label="Lotería, ir a buscar"><span class="brand-mark" aria-hidden="true">✳</span><span><strong>Mi Lotería</strong><small>Navidad & El Niño</small></span></a>
+    <div class="lottery-switch header-lottery-switch" role="group" aria-label="Tipo de sorteo"><button class="lottery-choice active" data-lottery="navidad" aria-pressed="true">Navidad <small>22 DIC</small></button><button class="lottery-choice" data-lottery="nino" aria-pressed="false">El Niño <small>06 ENE</small></button></div>
+    <button class="share-button" id="shareBtn" aria-label="Compartir esta web"><span>Compartir</span><b aria-hidden="true">↗</b></button>
   </header>
-
   <div class="app-shell">
     <aside class="sidebar" aria-label="Navegación principal">
-      <p class="eyebrow">Tu panel</p>
-      <button class="nav-item active" data-tab="buscar"><span>⌕</span>Buscar</button>
-      <button class="nav-item" data-tab="historico"><span>▣</span>Mi histórico <b id="savedCount">0</b></button>
-      <button class="nav-item" data-tab="resumen"><span>◫</span>Premios</button>
-      <button class="nav-item" data-tab="info"><span>i</span>Información</button>
-      <div class="sidebar-ad ad-slot" data-ad-slot="sidebar"><span>Espacio para tu anuncio</span></div>
+      <p class="eyebrow">Tu colección de ilusión</p>
+      <button class="nav-item active" data-tab="buscar" aria-current="page"><span aria-hidden="true">⌕</span>Comprobar</button>
+      <button class="nav-item" data-tab="historico"><span aria-hidden="true">▤</span>Mis números <b id="savedCount">0</b></button>
+      <button class="nav-item" data-tab="resumen"><span aria-hidden="true">✧</span>Premios</button>
+      <button class="nav-item" data-tab="info"><span aria-hidden="true">ⓘ</span>Información</button>
+      <div class="sidebar-note"><span aria-hidden="true">♡</span><strong>Lo bonito es compartir la ilusión.</strong><p>Décimos, participaciones y buenos deseos. Todo en su sitio.</p><small>EDICIÓN NAVIDAD 2026</small></div>
     </aside>
-
-    <main class="main-content">
-      <section class="tab-panel active" id="panel-buscar">
+    <main class="main-content" id="main">
+      <div class="draw-toolbar"><div><span class="eyebrow">Tu sorteo</span><p id="dataFreshness" role="status">Consultando datos disponibles…</p></div><div class="year-control"><label for="yearInput">Año del sorteo</label><select id="yearInput"><option value="2026" selected>2026</option><option value="2027">2027</option><option value="2025">2025</option></select></div></div>
+      <div id="storageNotice" class="storage-notice" role="status" hidden></div>
+      <section class="tab-panel active" id="panel-buscar" aria-label="Comprobar números">
+        <div class="hero-copy"><p class="eyebrow accent">La ilusión va contigo</p><h1>Tus números.<br><em>Tu Navidad.</em></h1><p class="lede">Guarda cada décimo, apunta con quién lo compartes<br class="desktop-break"> y tenlo todo a mano cuando llegue el gran día.</p></div>
         <div class="search-grid">
           <form class="search-card" id="searchForm">
-            <div class="card-heading"><div><p class="eyebrow">Comprobador</p><h2>Busca tu número</h2></div><span class="round-icon">✦</span></div>
+            <div class="card-heading"><div><p class="eyebrow">Un pequeño número, una gran ilusión</p><h2>Comprueba tu número</h2></div><span class="round-icon" aria-hidden="true">✧</span></div>
             <label for="numberInput">Número del décimo</label>
-            <div class="number-input-wrap"><input id="numberInput" inputmode="numeric" autocomplete="off" maxlength="5" placeholder="00000" aria-describedby="numberHint"><span>/ 99.999</span></div>
-            <p class="field-hint" id="numberHint">Admite números del 0 al 99.999. Los ceros se completan automáticamente.</p>
-            <div class="form-row"><div><label for="quantityInput">Cantidad jugada</label><div class="input-with-unit"><input id="quantityInput" type="number" min="0" step="1" value="20"><span>€</span></div></div><div><label for="commentInput">Nota <small>(opcional)</small></label><input id="commentInput" type="text" maxlength="80" placeholder="Ej. oficina"></div></div>
-            <button class="primary-button" type="submit"><span>Comprobar número</span><b>→</b></button>
+            <div class="number-input-wrap"><input id="numberInput" inputmode="numeric" autocomplete="off" maxlength="5" pattern="[0-9]{1,5}" placeholder="00000" aria-describedby="numberHint" required><span aria-hidden="true">N.º</span></div>
+            <p class="field-hint" id="numberHint">De 00000 a 99999. Completamos los ceros por ti.</p>
+            <div class="form-row"><div><label for="quantityInput">Importe jugado</label><div class="input-with-unit"><input id="quantityInput" type="text" inputmode="decimal" value="20" aria-describedby="stakeHint" required><span>€</span></div><small id="stakeHint">También participaciones</small></div><div><label for="commentInput">Tu nota <small>(opcional)</small></label><input id="commentInput" type="text" maxlength="200" placeholder="Familia, oficina, amigos…"></div></div>
+            <button class="primary-button" type="submit"><span>Guardar y comprobar</span><b aria-hidden="true">→</b></button>
+            <p class="save-hint">Se guarda en este navegador, también sin conexión.</p>
           </form>
-          <div class="side-stack"><div class="feature-card"><span class="feature-icon">🎟️</span><p class="eyebrow">Sin perder de vista</p><h3>Guarda tus números</h3><p>Añádelos a tu histórico y vuelve a comprobarlos cuando quieras.</p><button class="text-button" data-tab="historico">Ver mi histórico <span>→</span></button></div><div class="ad-slot compact-ad" data-ad-slot="search"><span>Espacio para tu anuncio</span></div></div>
+          <div class="side-stack"><div class="feature-card"><div class="ticket-art" aria-hidden="true"><span>LOTERÍA DE NAVIDAD</span><strong>2026</strong><small>UN AÑO MÁS, JUNTOS</small><i>✦</i></div><p class="eyebrow">Cada número tiene su historia</p><h3>La suerte, bien guardada.</h3><p>Conserva importes y notas. Descarga una copia para llevar tus números a otro dispositivo.</p><button class="text-button" data-tab="historico">Ver mis números <span aria-hidden="true">→</span></button></div></div>
         </div>
-        <div id="searchResult" aria-live="polite"></div>
+        <div id="searchResult" class="search-result" aria-live="polite"></div>
+        <div class="migration-note"><span aria-hidden="true">↗</span><p><strong>¿Vienes de la app de iPhone?</strong> Exporta tus números desde la app e importa el archivo en «Mis números». Tú decides qué conservar.</p><button class="text-button" data-tab="historico">Traer mis números →</button></div>
       </section>
-
-      <section class="tab-panel" id="panel-historico"><div class="page-heading"><div><p class="eyebrow accent">Tus décimos</p><h1>Mi histórico</h1><p class="lede">Todo lo que has guardado, en un solo sitio.</p></div><div class="heading-actions"><button class="ghost-button" id="refreshHistoryBtn">↻ Actualizar</button><button class="ghost-button danger" id="deleteAllBtn">Borrar todo</button></div></div><div class="section-switch"><button class="mini-choice active" data-lottery="navidad">Navidad</button><button class="mini-choice" data-lottery="nino">El Niño</button></div><div id="myNumbersList" class="numbers-list"></div></section>
-
-      <section class="tab-panel" id="panel-resumen"><div class="page-heading"><div><p class="eyebrow accent">Mapa de premios</p><h1>Premios principales</h1><p class="lede">Los números premiados del sorteo seleccionado.</p></div><button class="ghost-button" id="refreshSummaryBtn">↻ Actualizar</button></div><div class="section-switch"><button class="mini-choice active" data-lottery="navidad">Navidad</button><button class="mini-choice" data-lottery="nino">El Niño</button></div><div id="summaryList" class="summary-list"></div></section>
-
-      <section class="tab-panel" id="panel-info"><div class="page-heading"><div><p class="eyebrow accent">Todo claro</p><h1>Información</h1><p class="lede">Estado del sorteo, enlaces útiles y contacto.</p></div></div><div class="info-grid"><div class="info-card status-card"><div class="card-heading"><div><p class="eyebrow">Estado actual</p><h2 id="statusTitle">Cargando…</h2></div><span class="status-dot" id="statusDot"></span></div><p id="statusMessage">Consultando el estado del sorteo.</p><button class="text-button" id="checkStatusBtn">Actualizar estado <span>↻</span></button></div><div class="info-card"><p class="eyebrow">Importante</p><p>La lista se actualiza con los datos disponibles. Para confirmar un premio, consulta siempre la lista oficial de SELAE. Los premios superiores a 40.000 € pueden estar sujetos a retención.</p><a class="text-button" href="https://www.loteriasyapuestas.es/" target="_blank" rel="noreferrer">Ver fuente oficial <span>↗</span></a></div></div><div class="people-section"><div class="section-title"><div><p class="eyebrow accent">Detrás del proyecto</p><h2>Hecho con cariño</h2></div><button class="ghost-button" id="otherAppsBtn">Más proyectos ↗</button></div><div class="people-grid"><article class="person-card"><img src="images/uky.png" alt="Pablo Clemente Pérez"><div><h3>Pablo Clemente Pérez</h3><p>Desarrollo</p><button class="text-button contact-btn" data-contact="pablo">Ver contacto <span>→</span></button></div></article><article class="person-card"><img src="images/cookie.jpg" alt="Elena Gordaliza Fdez"><div><h3>Elena Gordaliza Fdez</h3><p>Diseño y producto</p><button class="text-button contact-btn" data-contact="elena">Ver contacto <span>→</span></button></div></article></div></div><p class="legal-note">Versión web de la app Lotería Navidad · Los datos guardados son locales en este dispositivo.</p></section>
+      <section class="tab-panel" id="panel-historico" aria-label="Mis números"><div class="page-heading"><div><p class="eyebrow accent">Tu colección</p><h1>Mis números</h1><p class="lede">Tus décimos y participaciones, con todos sus detalles.</p></div><button class="ghost-button" id="refreshHistoryBtn">↻ Comprobar todos</button></div><div id="portfolioSummary" class="portfolio-summary" aria-live="polite"></div><div class="backup-toolbar"><div><strong>Una copia, mucha tranquilidad.</strong><p>Exporta un archivo e impórtalo en otro dispositivo. No se sincroniza automáticamente.</p></div><div class="heading-actions"><button class="ghost-button" id="exportBackupBtn">↓ Exportar copia</button><button class="ghost-button" id="importBackupBtn">↑ Importar</button><input id="importBackupInput" type="file" accept=".json,application/json" hidden aria-label="Importar copia de números"></div></div><div id="myNumbersList" class="numbers-list"></div><div class="history-footer"><p>Los números se guardan en este navegador. Borrar sus datos también elimina tu colección: conserva una copia.</p><button class="text-button danger" id="deleteAllBtn">Borrar números de este sorteo</button></div></section>
+      <section class="tab-panel" id="panel-resumen" aria-label="Premios"><div class="page-heading"><div><p class="eyebrow accent">El día que esperamos</p><h1>Premios</h1><p class="lede">Los premios principales del sorteo y año seleccionados.</p></div><button class="ghost-button" id="refreshSummaryBtn">↻ Actualizar</button></div><div id="summaryList" class="summary-list"></div><p class="legal-note">Los importes mostrados son brutos. Confirma siempre tu premio con la lista oficial de SELAE antes de cobrarlo.</p></section>
+      <section class="tab-panel" id="panel-info" aria-label="Información"><div class="page-heading"><div><p class="eyebrow accent">Todo claro</p><h1>Con confianza.</h1><p class="lede">Cómo funciona tu colección y de dónde vienen los premios.</p></div></div><div class="info-grid"><div class="info-card status-card"><div class="card-heading"><div><p class="eyebrow">Estado del sorteo</p><h2 id="statusTitle">Consultando…</h2></div><span class="status-dot" id="statusDot" aria-hidden="true"></span></div><p id="statusMessage">Consultando el estado del sorteo.</p><button class="text-button" id="checkStatusBtn">Actualizar estado <span aria-hidden="true">↻</span></button></div><div class="info-card"><p class="eyebrow">La última palabra es oficial</p><h2>Comprueba antes de cobrar.</h2><p>Utilizamos el servicio de resultados de este proyecto. Puede haber retrasos o correcciones. Esta web no vende lotería ni está afiliada a SELAE.</p><a class="text-button" href="https://www.loteriasyapuestas.es/" target="_blank" rel="noopener noreferrer">Consultar SELAE ↗</a></div></div><div class="help-grid"><details><summary>¿Dónde se guardan mis números?</summary><p>En el almacenamiento de este navegador. No necesitas una cuenta. No hay sincronización con iCloud ni entre dispositivos. En «Mis números» puedes descargar una copia e importarla en otro navegador. Usa un navegador habitual: el modo privado puede borrar los datos al cerrar.</p></details><details><summary>¿Cómo paso mis números del iPhone?</summary><p>Actualiza la app a la edición 2026. En su aviso de bienvenida o en el acceso a la versión web, elige «Exportar mis números». Guarda el archivo y usa «Importar» en esta web. La importación añade los números; no borra tu colección.</p></details><details><summary>¿Puedo usarla como una app?</summary><p>En iPhone o iPad, abre esta página en Safari, pulsa Compartir y «Añadir a pantalla de inicio». En Android, usa «Instalar aplicación» o «Añadir a pantalla de inicio» en el menú del navegador. Una vez cargada, puedes consultar y guardar tus números sin conexión; actualizar premios requiere Internet.</p><button class="ghost-button" id="installBtn" hidden>Instalar Mi Lotería</button></details><details><summary>¿Qué pasa con Siri y las notificaciones?</summary><p>Los atajos de Siri y la sincronización iCloud siguen perteneciendo a la app de iOS. Esta web permite guardar, importar, exportar y comprobar tu colección. No envía notificaciones de premios: entra y pulsa «Comprobar todos» para actualizar.</p></details><details><summary>Privacidad y estadísticas</summary><p>Tus números, notas e importes se quedan en tu dispositivo. Si aceptas estadísticas, Firebase Analytics recoge uso general de la web. No enviamos tu colección a Analytics. Puedes cambiar tu decisión cuando quieras.</p><button class="ghost-button" id="privacySettingsBtn">Configurar estadísticas</button><a class="text-button" href="privacy.html">Leer la política de privacidad →</a></details><details><summary>¿Los premios incluyen impuestos?</summary><p>Mostramos importes brutos, proporcionales a la cantidad jugada. La retención se calcula según la normativa aplicable y cómo se comparta el décimo. Confirma el importe neto con SELAE o con la entidad de cobro.</p></details></div><div class="people-section"><div class="section-title"><div><p class="eyebrow accent">Desde 2016, contigo</p><h2>Hecho con cariño.</h2></div><button class="ghost-button" id="otherAppsBtn">Más proyectos ↗</button></div><div class="people-grid"><article class="person-card"><img src="images/uky.png" alt="" width="64" height="64"><div><h3>Pablo Clemente Pérez</h3><p>Desarrollo</p><button class="text-button contact-btn" data-contact="pablo">Contacto →</button></div></article><article class="person-card"><img src="images/cookie.jpg" alt="" width="64" height="64"><div><h3>Elena Gordaliza Fdez</h3><p>Diseño y producto</p><button class="text-button contact-btn" data-contact="elena">Contacto →</button></div></article></div></div><p class="legal-note">Mi Lotería · Navidad 2026 · <a href="privacy.html">Privacidad</a></p></section>
     </main>
   </div>
-  <nav class="mobile-nav" aria-label="Navegación móvil"><button class="nav-item active" data-tab="buscar"><span>⌕</span>Buscar</button><button class="nav-item" data-tab="historico"><span>▣</span>Histórico</button><button class="nav-item" data-tab="resumen"><span>◫</span>Premios</button><button class="nav-item" data-tab="info"><span>i</span>Info</button></nav>
+  <nav class="mobile-nav" aria-label="Navegación móvil"><button class="nav-item active" data-tab="buscar" aria-current="page"><span aria-hidden="true">⌕</span>Comprobar</button><button class="nav-item" data-tab="historico"><span aria-hidden="true">▤</span>Mis números</button><button class="nav-item" data-tab="resumen"><span aria-hidden="true">✧</span>Premios</button><button class="nav-item" data-tab="info"><span aria-hidden="true">ⓘ</span>Info</button></nav>
   <div id="toast" class="toast" role="status"></div>
-  <div id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" hidden><div class="modal-box"><button class="modal-close" id="modalClose" aria-label="Cerrar contacto">×</button><div id="modalIcon" class="modal-icon">✦</div><h2 id="modalTitle"></h2><p id="modalMessage"></p><div id="contactOptions" class="contact-options" hidden></div><button class="primary-button" id="modalOk">Entendido <b>→</b></button></div></div>
-  <script src="ad-config.js"></script>
-  <script src="script.js" defer></script>
+  <div id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" aria-describedby="modalMessage" hidden><div class="modal-box"><button class="modal-close" id="modalClose" aria-label="Cerrar diálogo">×</button><div id="modalIcon" class="modal-icon" aria-hidden="true">✦</div><h2 id="modalTitle"></h2><p id="modalMessage"></p><div id="contactOptions" class="contact-options" hidden></div><button class="primary-button" id="modalOk">Entendido <b aria-hidden="true">→</b></button></div></div>
+  <section id="consentBanner" class="consent-banner" aria-label="Preferencias de estadísticas" hidden><div><strong>Tu colección es privada.</strong><p>¿Nos ayudas con estadísticas de uso? No incluyen tus números ni notas. <a href="privacy.html">Privacidad</a></p></div><div class="heading-actions"><button class="ghost-button" id="declineAnalyticsBtn">Solo necesarias</button><button class="primary-button" id="acceptAnalyticsBtn">Aceptar estadísticas</button></div></section>
+  <noscript><div class="noscript-note">Necesitas activar JavaScript para guardar y consultar números. Puedes consultar los premios en <a href="https://www.loteriasyapuestas.es/">SELAE</a>.</div></noscript>
+  <script type="module" src="script.js"></script>
+  <script src="pwa.js" defer></script>
 </body>
 </html>

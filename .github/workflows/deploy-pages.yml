@@ -1,34 +1,56 @@
-name: Deploy Lotería to GitHub Pages
+name: Validate and deploy Lotería
 
 on:
   push:
+    branches: [main]
+  pull_request:
     branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm test
+      - name: Check JavaScript syntax
+        run: |
+          node --check script.js
+          node --check app-core.js
+          node --check analytics-consent.js
+          node --check service-worker.js
+          node --check pwa.js
+      - name: Prepare public files
+        run: |
+          mkdir _site
+          cp index.html privacy.html styles.css script.js app-core.js analytics-consent.js firebase-config.js pwa.js service-worker.js manifest.json CNAME .nojekyll _site/
+          cp -R images _site/images
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request'
+        with:
+          path: _site
   deploy:
+    if: github.event_name != 'pull_request'
+    needs: validate
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-      - name: Upload static site
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: .
+      - uses: actions/configure-pages@v5
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
