@@ -708,7 +708,7 @@ async function handleImportFile(event) {
   const file = input.files?.[0];
   input.value = '';
   if (!file) return;
-  if (file.size > 2_000_000) return showModal('Archivo demasiado grande', 'La copia no puede superar 2 MB.', 'error');
+  if (file.size > 10_000_000) return showModal('Archivo demasiado grande', 'La copia no puede superar 10 MB.', 'error');
   if (!repository) return showStorageProblem();
   try {
     const result = repository.import(await file.text());

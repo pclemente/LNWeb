@@ -13,6 +13,7 @@ export const STORAGE_VERSION = 2;
 export const MAX_TICKETS = 10_000;
 export const MAX_NOTE_LENGTH = 5_000;
 export const MAX_STAKE_CENTS = 100_000_000;
+export const MAX_BACKUP_BYTES = 10_000_000;
 
 const LEGACY_WEB_KEYS = Object.freeze({
   navidad: 'loteria_saved_navidad',
@@ -654,13 +655,20 @@ function ticketFingerprint(ticket) {
 
 export function mergeTickets(existing, incoming, idFactory = randomId) {
   const tickets = existing.map((ticket) => ({ ...ticket }));
-  const fingerprints = new Set(tickets.map(ticketFingerprint));
+  const existingCounts = new Map();
+  for (const ticket of tickets) {
+    const fingerprint = ticketFingerprint(ticket);
+    existingCounts.set(fingerprint, (existingCounts.get(fingerprint) || 0) + 1);
+  }
+  const incomingCounts = new Map();
   const ids = new Set(tickets.map((ticket) => ticket.id));
   let added = 0;
   let skipped = 0;
   for (const original of incoming) {
     const fingerprint = ticketFingerprint(original);
-    if (fingerprints.has(fingerprint)) {
+    const occurrence = (incomingCounts.get(fingerprint) || 0) + 1;
+    incomingCounts.set(fingerprint, occurrence);
+    if (occurrence <= (existingCounts.get(fingerprint) || 0)) {
       skipped += 1;
       continue;
     }
@@ -668,7 +676,6 @@ export function mergeTickets(existing, incoming, idFactory = randomId) {
     if (ids.has(ticket.id)) ticket.id = idFactory();
     while (ids.has(ticket.id)) ticket.id = idFactory();
     ids.add(ticket.id);
-    fingerprints.add(fingerprint);
     tickets.push(ticket);
     added += 1;
     if (tickets.length > MAX_TICKETS) throw new ValidationError('La copia supera el límite de décimos guardados.');
@@ -779,7 +786,9 @@ function parseLegacyWebBackup(payload, options) {
 export function parseBackupPayload(rawPayload, options = {}) {
   let payload = rawPayload;
   if (typeof rawPayload === 'string') {
-    if (rawPayload.length > 2_000_000) throw new ValidationError('El archivo supera el límite de 2 MB.');
+    if (new TextEncoder().encode(rawPayload).byteLength > MAX_BACKUP_BYTES) {
+      throw new ValidationError('El archivo supera el límite de 10 MB.');
+    }
     try {
       payload = JSON.parse(rawPayload);
     } catch {

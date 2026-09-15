@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  MAX_BACKUP_BYTES,
   PersistenceError,
   STORAGE_KEYS,
   TicketRepository,
@@ -10,6 +11,7 @@ import {
   evaluateTicket,
   expectedDrawYear,
   formatEuro,
+  mergeTickets,
   parseBackupPayload,
   parseEuroToCents,
   readApiCache,
@@ -168,6 +170,67 @@ test('canonical import is strict and merges idempotently without overwriting dif
   assert.equal(different.document.tickets.length, 2);
   assert.throws(() => repository.import({ ...backup, tickets: [{ ...backup.tickets[0], number: '100000' }] }), ValidationError);
   assert.equal(repository.snapshot().tickets.length, 2);
+});
+
+test('backup restore preserves the multiplicity of identical tickets and stays idempotent', () => {
+  const storage = new MemoryStorage();
+  const repository = new TicketRepository(storage, { now: () => fixedNow, idFactory: idFactory() });
+  repository.load();
+  const common = {
+    lottery: 'navidad', drawYear: 2026, number: '12345', stakeCents: 2000, note: 'compartido',
+  };
+  const backup = {
+    format: 'loteria-ticket-backup',
+    version: 1,
+    currency: 'EUR',
+    tickets: [{ ...common, id: 'ticket-a' }, { ...common, id: 'ticket-b' }],
+  };
+
+  const first = repository.import(backup);
+  assert.equal(first.added, 2);
+  assert.equal(first.skipped, 0);
+  assert.equal(first.document.tickets.length, 2);
+  assert.deepEqual(new Set(first.document.tickets.map((ticket) => ticket.id)), new Set(['ticket-a', 'ticket-b']));
+
+  const second = repository.import(backup);
+  assert.equal(second.added, 0);
+  assert.equal(second.skipped, 2);
+  assert.equal(second.document.tickets.length, 2);
+});
+
+test('backup merge keeps the greater existing or imported count for each fingerprint', () => {
+  const make = (id, note) => ({
+    id, lottery: 'navidad', drawYear: 2026, number: '12345', stakeCents: 2000, note,
+    createdAt: fixedNow.toISOString(), updatedAt: fixedNow.toISOString(),
+  });
+  const { tickets, added, skipped } = mergeTickets(
+    [make('existing-a', 'same')],
+    [make('import-a', 'same'), make('import-b', 'same'), make('existing-a', 'different')],
+    idFactory(),
+  );
+  assert.deepEqual({ added, skipped }, { added: 2, skipped: 1 });
+  assert.equal(tickets.filter((ticket) => ticket.note === 'same').length, 2);
+  assert.equal(tickets.filter((ticket) => ticket.note === 'different').length, 1);
+  assert.equal(new Set(tickets.map((ticket) => ticket.id)).size, 3);
+});
+
+test('valid backups larger than the former 2 MB cap import within the 10 MB bound', () => {
+  const payload = JSON.stringify({
+    format: 'loteria-ticket-backup',
+    version: 1,
+    currency: 'EUR',
+    tickets: Array.from({ length: 430 }, (_, index) => ({
+      lottery: 'navidad',
+      drawYear: 2026,
+      number: String(index),
+      stakeCents: 2000,
+      note: `${index}-${'x'.repeat(4_900)}`,
+    })),
+  });
+  const bytes = new TextEncoder().encode(payload).byteLength;
+  assert.ok(bytes > 2_000_000);
+  assert.ok(bytes < MAX_BACKUP_BYTES);
+  assert.equal(parseBackupPayload(payload, { nowIso: fixedNow.toISOString() }).tickets.length, 430);
 });
 
 test('migration preserves zero stakes and long notes but new saves require a positive stake', () => {
