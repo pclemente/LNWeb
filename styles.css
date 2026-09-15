@@ -9,3 +9,5 @@
 .ticket-actions{display:flex;gap:8px;flex-shrink:0}.result-badge{display:inline-block;font-size:10px;border-radius:4px;padding:3px 7px;margin-top:7px;background:#c5e6cf10;color:var(--muted)}.result-badge.winner{color:var(--mint);background:#c5e6cf20}.result-badge.unavailable,.result-badge.needs-year{color:var(--orange)}#cancelEditBtn{margin-top:12px}#storageNotice[hidden]{display:none!important}@media(max-width:580px){.ticket-actions{flex-direction:column}}
 @media(max-width:580px){.hero-copy h1{font-size:49px;margin-bottom:14px}.hero-copy .eyebrow{margin-bottom:9px}.hero-copy{margin-bottom:20px}.draw-toolbar{margin-bottom:20px}.search-card{padding:21px}.card-heading{margin-bottom:22px}.field-hint{margin-bottom:20px}.save-hint{margin-top:10px}}
 .ticket-result-detail,.cached-result{font-size:11px;line-height:1.55;color:var(--muted);margin:7px 0 0;max-width:540px}.cached-result{font-size:10px;color:var(--orange)}
+
+.result-badge.needs-review{color:var(--orange)}

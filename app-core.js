@@ -11,7 +11,7 @@ export const BACKUP_FORMAT = 'loteria-ticket-backup';
 export const BACKUP_VERSION = 1;
 export const STORAGE_VERSION = 2;
 export const MAX_TICKETS = 10_000;
-export const MAX_NOTE_LENGTH = 200;
+export const MAX_NOTE_LENGTH = 5_000;
 export const MAX_STAKE_CENTS = 100_000_000;
 
 const LEGACY_WEB_KEYS = Object.freeze({
@@ -154,11 +154,13 @@ export function normalizeTicket(input, options = {}) {
       throw new ValidationError('La cantidad en céntimos no es válida.', 'stake');
     }
     stakeCents = Number(raw);
-    if (stakeCents <= 0 || stakeCents > MAX_STAKE_CENTS) {
+    if (stakeCents < 0 || (!options.allowZeroStake && stakeCents === 0) || stakeCents > MAX_STAKE_CENTS) {
       throw new ValidationError('La cantidad jugada debe ser mayor que cero.', 'stake');
     }
   } else {
-    stakeCents = parseEuroToCents(input.amount ?? input.quantity ?? input.stake ?? 20);
+    stakeCents = parseEuroToCents(input.amount ?? input.quantity ?? input.stake ?? 20, {
+      allowZero: options.allowZeroStake === true,
+    });
   }
   const suppliedId = typeof input.id === 'string' ? input.id.trim() : '';
   const id = suppliedId && suppliedId.length <= 128 ? suppliedId : (options.idFactory || randomId)();
@@ -322,6 +324,13 @@ export function prizeForTicket(ticket, bundle) {
 }
 
 export function evaluateTicket(ticket, bundle, options = {}) {
+  if (ticket.stakeCents === 0) {
+    return {
+      kind: 'needs-review',
+      title: 'Revisa el importe',
+      message: 'Este décimo se importó con 0,00 €. Edita el importe antes de comprobarlo.',
+    };
+  }
   if (ticket.drawYear === null) {
     return {
       kind: 'needs-year',
@@ -398,7 +407,10 @@ function normalizeDocument(raw) {
     throw new ValidationError('La copia local no tiene un formato válido.');
   }
   if (raw.tickets.length > MAX_TICKETS) throw new ValidationError('La copia local contiene demasiados décimos.');
-  const tickets = raw.tickets.map((ticket) => normalizeTicket(ticket, { allowUnknownYear: true }));
+  const tickets = raw.tickets.map((ticket) => normalizeTicket(ticket, {
+    allowUnknownYear: true,
+    allowZeroStake: true,
+  }));
   const revision = Number(raw.revision);
   if (!Number.isSafeInteger(revision) || revision < 0) throw new ValidationError('La revisión local no es válida.');
   return {
@@ -468,7 +480,7 @@ export function migrateLegacyStorage(storage, options = {}) {
           stakeCents: undefined,
           amount: entry?.quantity ?? entry?.amount ?? 20,
           note: entry?.comment ?? entry?.note ?? '',
-        }, { allowUnknownYear: true, nowIso, idFactory }));
+        }, { allowUnknownYear: true, allowZeroStake: true, nowIso, idFactory }));
       } catch (error) {
         warnings.push(`${lottery} ${index + 1}: ${error.message}`);
       }
@@ -677,6 +689,7 @@ function parseCanonicalBackup(payload, options) {
   return {
     tickets: payload.tickets.map((ticket) => normalizeTicket(ticket, {
       allowUnknownYear: true,
+      allowZeroStake: true,
       nowIso: options.nowIso,
       idFactory: options.idFactory,
     })),
@@ -697,6 +710,7 @@ function parseEntriesBackup(payload, options) {
       note: entry.note ?? entry.comment,
     }, {
       allowUnknownYear: true,
+      allowZeroStake: true,
       nowIso: options.nowIso,
       idFactory: options.idFactory,
     })),
@@ -718,6 +732,7 @@ function parseIosDefaults(payload, options) {
         const note = splitIosEntry(source[keys.notes], number, '');
         tickets.push(normalizeTicket({ lottery, drawYear: null, number, amount, note }, {
           allowUnknownYear: true,
+          allowZeroStake: true,
           nowIso: options.nowIso,
           idFactory: options.idFactory,
         }));
@@ -748,6 +763,7 @@ function parseLegacyWebBackup(payload, options) {
           note: entry?.note ?? entry?.comment,
         }, {
           allowUnknownYear: true,
+          allowZeroStake: true,
           nowIso: options.nowIso,
           idFactory: options.idFactory,
         }));
@@ -795,7 +811,10 @@ export function createBackup(tickets, options = {}) {
     exportedAt: (options.now || new Date()).toISOString(),
     source: options.source || 'web',
     currency: 'EUR',
-    tickets: tickets.map((ticket) => normalizeTicket(ticket, { allowUnknownYear: true })),
+    tickets: tickets.map((ticket) => normalizeTicket(ticket, {
+      allowUnknownYear: true,
+      allowZeroStake: true,
+    })),
   };
 }
 

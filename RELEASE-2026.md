@@ -31,7 +31,7 @@ Firebase no almacenaba los décimos de iOS: su uso era Analytics. La colección 
 - Los importes no pierden sus decimales ni se sustituyen silenciosamente por 20 €.
 - Las notas se insertan como texto, no como HTML ejecutable.
 - El guardado exige persistencia correcta; no se anuncia éxito si falta almacenamiento.
-- Los registros antiguos conservan año pendiente, en lugar de recibir un año inventado.
+- Los registros antiguos conservan año pendiente, en lugar de recibir un año inventado. Se conservan importes cero para revisión y notas de hasta 5.000 caracteres, sin truncarlas.
 - Importar una copia no reemplaza toda la colección ni duplica una copia idéntica.
 - Las estadísticas modulares usan la API correcta y no recogen búsquedas ni datos de la colección.
 - La interfaz dejó de anunciar «datos en directo» sin verificarlo.
@@ -55,6 +55,6 @@ Al revisar los endpoints HTTPS de producción:
 
 ## Comprobación de esta publicación
 
-`npm test` cubre céntimos, migración web/iOS, importaciones repetidas y conflictivas, fallos de escritura, recuperación, consistencia de API, años, estados y caché. Se ha probado manualmente en navegador el alta `00123` con importe `2,50`, notas con caracteres HTML, edición a `10,75`, persistencia tras recarga e importación de una copia iOS con números de ambos sorteos. Se ha revisado el diseño de escritorio y móvil y abierto la interfaz con su colección después de detener el servidor local. 16 pruebas automáticas pasaron antes de publicar. Los tests no equivalen a una prueba con usuarios ni a contrastar todos los premios con SELAE.
+`npm test` cubre céntimos, migración web/iOS, importaciones repetidas y conflictivas, fallos de escritura, recuperación, consistencia de API, años, estados y caché. Se ha probado manualmente en navegador el alta `00123` con importe `2,50`, notas con caracteres HTML, edición a `10,75`, persistencia tras recarga e importación de una copia iOS con números de ambos sorteos. Se ha revisado el diseño de escritorio y móvil y abierto la interfaz con su colección después de detener el servidor local. 17 pruebas automáticas pasaron antes de publicar. Los tests no equivalen a una prueba con usuarios ni a contrastar todos los premios con SELAE.
 
 La publicación web está orientada a guardar y trasladar la colección con seguridad. No debe anunciarse aún como sustituto con paridad total de iCloud/Siri, ni como fuente oficial de premios.

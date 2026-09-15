@@ -170,6 +170,31 @@ test('canonical import is strict and merges idempotently without overwriting dif
   assert.equal(repository.snapshot().tickets.length, 2);
 });
 
+test('migration preserves zero stakes and long notes but new saves require a positive stake', () => {
+  const storage = new MemoryStorage();
+  const repository = new TicketRepository(storage, { now: () => fixedNow, idFactory: idFactory() });
+  repository.load();
+  const longNote = 'a'.repeat(1_000);
+  const result = repository.import({
+    format: 'loteria-ticket-backup',
+    version: 1,
+    currency: 'EUR',
+    tickets: [{ lottery: 'nino', drawYear: 2026, number: '7', stakeCents: 0, note: longNote }],
+  });
+  assert.equal(result.added, 1);
+  assert.equal(result.document.tickets[0].stakeCents, 0);
+  assert.equal(result.document.tickets[0].note, longNote);
+  assert.equal(evaluateTicket(result.document.tickets[0], null).kind, 'needs-review');
+  assert.equal(new TicketRepository(storage).load().tickets[0].note, longNote);
+  assert.throws(() => repository.create({
+    lottery: 'nino', drawYear: 2026, number: '8', stakeCents: 0, note: '',
+  }), ValidationError);
+  assert.throws(() => parseBackupPayload({
+    format: 'loteria-ticket-backup', version: 1, currency: 'EUR',
+    tickets: [{ lottery: 'nino', drawYear: 2026, number: '9', stakeCents: 1, note: 'x'.repeat(5_001) }],
+  }), ValidationError);
+});
+
 test('a failed staged write leaves the in-memory document unchanged and is recoverable', () => {
   const storage = new MemoryStorage();
   const repository = new TicketRepository(storage, { now: () => fixedNow, idFactory: idFactory() });

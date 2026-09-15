@@ -556,7 +556,7 @@ function renderTicket(ticket) {
   const actions = element('div', { className: 'ticket-actions' }, [
     element('button', {
       className: 'edit-number',
-      text: ticket.drawYear === null ? 'Asignar año' : 'Editar',
+      text: ticket.stakeCents === 0 ? 'Revisar importe' : ticket.drawYear === null ? 'Asignar año' : 'Editar',
       attrs: { type: 'button', 'data-edit-ticket': ticket.id, 'aria-label': `Editar ${ticket.number}` },
     }),
     element('button', {
@@ -566,7 +566,7 @@ function renderTicket(ticket) {
     }),
   ]);
   const article = element('article', { className: `number-item ${result.kind === 'winner' ? 'has-prize' : ''}` }, [main, actions]);
-  if (ticket.drawYear === null) article.classList.add('needs-year');
+  if (ticket.drawYear === null || ticket.stakeCents === 0) article.classList.add('needs-review');
   return article;
 }
 
@@ -586,7 +586,7 @@ function renderPortfolioSummary() {
   const results = tickets.map((ticket) => evaluateTicket(ticket, state.bundles[ticket.lottery]));
   const winners = results.filter((result) => result.kind === 'winner').length;
   const unresolved = results.filter((result) => (
-    ['unavailable', 'pending', 'provisional-none', 'needs-year'].includes(result.kind)
+    ['unavailable', 'pending', 'provisional-none', 'needs-year', 'needs-review'].includes(result.kind)
   )).length;
   const resultValue = winners === 0 && unresolved > 0 ? 'Pendiente' : formatEuro(estimated);
   const resultLabel = unresolved > 0
