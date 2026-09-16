@@ -1,4 +1,4 @@
-const CACHE = 'mi-loteria-shell-2026-6';
+const CACHE = 'mi-loteria-shell-2026-7';
 const SHELL = ['./', './index.html', './styles.css', './script.js', './app-core.js', './pwa.js', './privacy.html', './manifest.json', './images/icon-32.png', './images/icon-180.png', './images/icon-192.png', './images/icon-512.png', './images/uky.png', './images/cookie.jpg'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)));
