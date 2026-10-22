@@ -218,6 +218,74 @@ function parseStatus(source, label) {
   return status;
 }
 
+function parsePayloadYear(source, label, { required = false } = {}) {
+  if (!Object.prototype.hasOwnProperty.call(source, 'year')) {
+    if (required) throw new ValidationError(`${label} no incluye el año del sorteo.`);
+    return null;
+  }
+  try {
+    return normalizeDrawYear(source.year);
+  } catch {
+    throw new ValidationError(`${label} contiene un año de sorteo inválido.`);
+  }
+}
+
+function scheduledDrawDate(lottery, year) {
+  const date = lottery === 'navidad'
+    ? `${year}-12-22T09:00:00+01:00`
+    : `${year}-01-06T12:00:00+01:00`;
+  return new Date(date);
+}
+
+function asValidDate(value, label) {
+  const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+  if (!Number.isFinite(date.getTime())) throw new ValidationError(label);
+  return date;
+}
+
+export function validateCurrentStatus(lottery, source, options = {}) {
+  const normalizedLottery = normalizeLottery(lottery);
+  if (!isPlainObject(source)) throw new ValidationError('El estado actual no tiene un formato válido.');
+  if (!Object.prototype.hasOwnProperty.call(source, 'error')) {
+    throw new ValidationError('El estado actual no incluye el indicador de error.');
+  }
+  const status = parseStatus(source, 'El estado actual');
+  const drawYear = parsePayloadYear(source, 'El estado actual', { required: true });
+  if (source.timezone !== 'Europe/Madrid') {
+    throw new ValidationError('El estado actual contiene una zona horaria desconocida.');
+  }
+  if (typeof source.drawDate !== 'string') {
+    throw new ValidationError('El estado actual no incluye una fecha de sorteo válida.');
+  }
+  const drawDate = asValidDate(source.drawDate, 'El estado actual no incluye una fecha de sorteo válida.');
+  if (drawDate.getTime() !== scheduledDrawDate(normalizedLottery, drawYear).getTime()) {
+    throw new ValidationError('La fecha del estado actual no corresponde al sorteo indicado.');
+  }
+  if (typeof source.state !== 'string' || !source.state.trim() || source.state.length > 64) {
+    throw new ValidationError('El estado actual contiene una fase desconocida.');
+  }
+  if (typeof source.message !== 'string' || !source.message.trim() || source.message.length > 500) {
+    throw new ValidationError('El estado actual no incluye un mensaje válido.');
+  }
+  if (status === 0 && (
+    source.state !== 'not_started'
+    || source.message !== 'El sorteo aún no ha comenzado.'
+  )) {
+    throw new ValidationError('El estado previo al sorteo no coincide con el contrato publicado.');
+  }
+  return {
+    lottery: normalizedLottery,
+    drawYear,
+    status,
+    state: source.state,
+    message: source.message,
+    drawDate: source.drawDate,
+    timezone: source.timezone,
+    source: options.source === 'cache' ? 'cache' : 'network',
+    receivedAt: asIsoDate(options.receivedAt, new Date().toISOString()),
+  };
+}
+
 function summaryShape(lottery) {
   if (lottery === 'navidad') {
     return Array.from({ length: 13 }, (_, index) => ({
@@ -247,10 +315,22 @@ export function validateApiBundle(lottery, rawBundle, options = {}) {
   }
   const drawYear = datasetYearFromTimestamp(rawBundle.summary.timestamp, normalizedLottery);
   if (drawYear === null) throw new ValidationError('El resumen no incluye una fecha de sorteo válida.');
+  const declaredYears = [
+    parsePayloadYear(rawBundle.numbers, 'La lista de premios'),
+    parsePayloadYear(rawBundle.summary, 'El resumen'),
+    parsePayloadYear(rawBundle.status, 'El estado'),
+  ];
+  const declaredYearCount = declaredYears.filter((year) => year !== null).length;
+  if (declaredYearCount !== 0 && declaredYearCount !== declaredYears.length) {
+    throw new ValidationError('Las fuentes del servidor no incluyen el mismo año de sorteo.');
+  }
+  if (declaredYears.some((year) => year !== null && year !== drawYear)) {
+    throw new ValidationError('El año publicado no corresponde a la fecha del resumen.');
+  }
 
   const prizes = Object.create(null);
   for (const [rawNumber, rawPrize] of Object.entries(rawBundle.numbers)) {
-    if (['status', 'error', 'timestamp'].includes(rawNumber)) continue;
+    if (['status', 'error', 'timestamp', 'year'].includes(rawNumber)) continue;
     let number;
     try {
       number = normalizeNumber(rawNumber);
@@ -314,6 +394,47 @@ export function validateApiBundle(lottery, rawBundle, options = {}) {
   };
 }
 
+export function resolveDrawAvailability(lottery, drawYear, bundle, currentStatus, options = {}) {
+  const normalizedLottery = normalizeLottery(lottery);
+  const normalizedYear = normalizeDrawYear(drawYear);
+  const now = asValidDate(options.now ?? new Date(), 'No se pudo determinar la fecha actual.');
+  const bundleMatches = Boolean(
+    bundle
+    && bundle.lottery === normalizedLottery
+    && bundle.drawYear === normalizedYear
+  );
+  const currentStatusMatches = Boolean(
+    currentStatus
+    && currentStatus.lottery === normalizedLottery
+    && currentStatus.drawYear === normalizedYear
+  );
+
+  // A published list for this draw is stronger evidence than a stale status=0 document.
+  if (bundleMatches && bundle.status > 0) {
+    return { kind: 'results', status: bundle.status, bundle };
+  }
+
+  if (currentStatusMatches) {
+    if (currentStatus.status === 0) {
+      const drawDate = asValidDate(currentStatus.drawDate, 'El estado actual no incluye una fecha válida.');
+      if (now < drawDate) {
+        return { kind: 'not-started', status: 0, message: currentStatus.message };
+      }
+      return { kind: 'stale-not-started', status: 0 };
+    }
+    return { kind: 'awaiting-results', status: currentStatus.status };
+  }
+
+  if (bundleMatches && bundle.status === 0) {
+    if (now < scheduledDrawDate(normalizedLottery, normalizedYear)) {
+      return { kind: 'not-started', status: 0, message: 'El sorteo aún no ha comenzado.' };
+    }
+    return { kind: 'stale-not-started', status: 0 };
+  }
+
+  return { kind: 'unavailable', status: null };
+}
+
 export function prizeForTicket(ticket, bundle) {
   if (!bundle || ticket.lottery !== bundle.lottery || ticket.drawYear !== bundle.drawYear) return null;
   const standardPrizeCents = bundle.prizes[ticket.number];
@@ -339,31 +460,50 @@ export function evaluateTicket(ticket, bundle, options = {}) {
       message: 'Asigna el año del sorteo antes de comprobar este décimo.',
     };
   }
-  if (!bundle) {
-    return {
-      kind: 'unavailable',
-      title: 'Comprobación no disponible',
-      message: 'No hay una lista válida para este sorteo y año. El décimo sigue guardado.',
-    };
-  }
-  if (bundle.lottery !== ticket.lottery || bundle.drawYear !== ticket.drawYear) {
-    return {
-      kind: 'unavailable',
-      title: `Sin datos de ${ticket.drawYear}`,
-      message: `El servidor ofrece datos de ${bundle.drawYear}; no se usarán para comprobar este décimo.`,
-    };
-  }
-  if (bundle.status === 0) {
+  const availability = resolveDrawAvailability(
+    ticket.lottery,
+    ticket.drawYear,
+    bundle,
+    options.currentStatus,
+    options,
+  );
+  if (availability.kind === 'not-started') {
     return {
       kind: 'pending',
       title: 'Sorteo no comenzado',
-      message: 'Todavía no se puede determinar el resultado. El décimo queda guardado.',
+      message: `${availability.message} Todavía no se puede determinar el resultado. El décimo queda guardado.`,
     };
   }
-  if (bundle.status === 1) {
-    const received = new Date(bundle.receivedAt).getTime();
-    const age = (options.now || new Date()).getTime() - received;
-    if (bundle.source === 'cache' && (!Number.isFinite(age) || age > 10 * 60 * 1000)) {
+  if (availability.kind === 'stale-not-started') {
+    return {
+      kind: 'unavailable',
+      title: 'Estado pendiente de actualización',
+      message: 'La fecha prevista del sorteo ya ha pasado. No se usará el estado «no comenzado» para decidir el resultado.',
+    };
+  }
+  if (availability.kind === 'awaiting-results') {
+    return {
+      kind: 'pending',
+      title: 'Resultados actualizándose',
+      message: 'El sorteo ya está en curso o finalizado, pero todavía no hay una lista válida para comprobar este décimo.',
+    };
+  }
+  if (availability.kind !== 'results') {
+    const offeredYear = bundle?.drawYear;
+    return {
+      kind: 'unavailable',
+      title: offeredYear ? `Sin datos de ${ticket.drawYear}` : 'Comprobación no disponible',
+      message: offeredYear
+        ? `El servidor ofrece datos de ${offeredYear}; no se usarán para comprobar este décimo.`
+        : 'No hay una lista válida para este sorteo y año. El décimo sigue guardado.',
+    };
+  }
+
+  const activeBundle = availability.bundle;
+  if (activeBundle.status === 1) {
+    const received = new Date(activeBundle.receivedAt).getTime();
+    const age = asValidDate(options.now ?? new Date(), 'No se pudo determinar la fecha actual.').getTime() - received;
+    if (activeBundle.source === 'cache' && (!Number.isFinite(age) || age > 10 * 60 * 1000)) {
       return {
         kind: 'unavailable',
         title: 'Actualización interrumpida',
@@ -371,24 +511,24 @@ export function evaluateTicket(ticket, bundle, options = {}) {
       };
     }
   }
-  const prize = prizeForTicket(ticket, bundle);
+  const prize = prizeForTicket(ticket, activeBundle);
   if (prize) {
     return {
       kind: 'winner',
-      title: bundle.status === 2 ? 'Premiado en la lista provisional' : '¡Premiado!',
+      title: activeBundle.status === 2 ? 'Premiado en la lista provisional' : '¡Premiado!',
       message: `Premio estimado para tu importe: ${formatEuro(prize.estimatedPrizeCents)}.`,
       prize,
-      cached: bundle.source === 'cache',
+      cached: activeBundle.source === 'cache',
     };
   }
-  if (bundle.status === 1) {
+  if (activeBundle.status === 1) {
     return {
       kind: 'pending',
       title: 'Pendiente',
       message: 'El sorteo está en curso y este número aún podría aparecer.',
     };
   }
-  if (bundle.status === 2) {
+  if (activeBundle.status === 2) {
     return {
       kind: 'provisional-none',
       title: 'Sin premio en la lista provisional',
@@ -399,7 +539,7 @@ export function evaluateTicket(ticket, bundle, options = {}) {
     kind: 'not-winner',
     title: 'Sin premio',
     message: 'Este número no figura entre los premios de la lista publicada.',
-    cached: bundle.source === 'cache',
+    cached: activeBundle.source === 'cache',
   };
 }
 

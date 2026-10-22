@@ -37,4 +37,8 @@ La web no carga Firebase ni recoge estadísticas. Firebase Analytics se utiliza 
 
 ## Fuente de premios y campaña
 
+La temporada actual se consulta en `LoteriaNavidadCurrentStatus.json` (2026) y `LoteriaElNinoCurrentStatus.json` (2027). Antes del inicio, `status: 0` muestra «El sorteo aún no ha comenzado» y los décimos quedan pendientes. Los conjuntos históricos siguen disponibles al seleccionar su año. Una respuesta con estado cero que supere la fecha prevista se muestra como pendiente de actualización; nunca sustituye una lista válida ya publicada para ese mismo sorteo. El lector admite el campo `year` de los nuevos resultados y exige que coincida con la fecha y con los otros documentos.
+
+Validación del 22 de octubre: 24 pruebas de contrato y persistencia; en navegador se comprobó el estado previo de ambos sorteos, guardar un décimo como pendiente y consultar el primer premio `06703` del histórico de El Niño 2026.
+
 Ver [RELEASE-2026.md](RELEASE-2026.md) para validación, límites de paridad y preparación del servicio de datos. Ninguna comprobación sustituye la lista oficial de SELAE.

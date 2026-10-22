@@ -10,7 +10,9 @@ import {
   normalizeDrawYear,
   parseEuroToCents,
   readApiCache,
+  resolveDrawAvailability,
   validateApiBundle,
+  validateCurrentStatus,
   writeApiCache,
 } from './app-core.js';
 
@@ -20,11 +22,13 @@ const API = Object.freeze({
     numbers: `${API_BASE}LoteriaNavidad.json`,
     summary: `${API_BASE}LoteriaNavidadResumen.json`,
     status: `${API_BASE}LoteriaNavidadStatus.json`,
+    currentStatus: `${API_BASE}LoteriaNavidadCurrentStatus.json`,
   },
   nino: {
     numbers: `${API_BASE}LoteriaElNino.json`,
     summary: `${API_BASE}LoteriaElNinoResumen.json`,
     status: `${API_BASE}LoteriaElNinoStatus.json`,
+    currentStatus: `${API_BASE}LoteriaElNinoCurrentStatus.json`,
   },
 });
 
@@ -60,6 +64,7 @@ const state = {
   },
   tickets: [],
   bundles: { navidad: null, nino: null },
+  currentStatuses: { navidad: null, nino: null },
   requests: { navidad: 0, nino: 0 },
   load: {
     navidad: { loading: false, error: null },
@@ -80,6 +85,9 @@ let modalFocusReturn;
 const byId = (id) => document.getElementById(id);
 const all = (selector, root = document) => [...root.querySelectorAll(selector)];
 const selectedYear = () => state.yearByLottery[state.lottery];
+const ticketResult = (ticket) => evaluateTicket(ticket, state.bundles[ticket.lottery], {
+  currentStatus: state.currentStatuses[ticket.lottery],
+});
 
 function element(tag, options = {}, children = []) {
   const node = document.createElement(tag);
@@ -204,6 +212,8 @@ function populateYearInput() {
   const years = new Set([expected + 1, expected, expected - 1, expected - 2, selectedYear()]);
   const bundleYear = state.bundles[state.lottery]?.drawYear;
   if (bundleYear) years.add(bundleYear);
+  const currentStatusYear = state.currentStatuses[state.lottery]?.drawYear;
+  if (currentStatusYear) years.add(currentStatusYear);
   for (const ticket of state.tickets) {
     if (ticket.lottery === state.lottery && ticket.drawYear !== null) years.add(ticket.drawYear);
   }
@@ -273,32 +283,62 @@ async function loadData(lottery = state.lottery, options = {}) {
   state.load[lottery] = { loading: true, error: null };
   if (options.announce) toast('Actualizando datos…');
   renderFreshness();
+  let currentStatusError = null;
+  let currentStatusUpdated = false;
   try {
-    const [numbers, summary, status] = await Promise.all([
+    const responses = await Promise.allSettled([
       fetchJSON(API[lottery].numbers),
       fetchJSON(API[lottery].summary),
       fetchJSON(API[lottery].status),
+      fetchJSON(API[lottery].currentStatus),
     ]);
+    if (state.requests[lottery] !== requestId) return;
+
+    const currentStatusResponse = responses[3];
+    if (currentStatusResponse.status === 'fulfilled') {
+      try {
+        state.currentStatuses[lottery] = validateCurrentStatus(lottery, currentStatusResponse.value, {
+          source: 'network',
+          receivedAt: new Date().toISOString(),
+        });
+        currentStatusUpdated = true;
+      } catch (error) {
+        currentStatusError = error;
+        console.warn(`Rejected current status for ${lottery}`, error);
+      }
+    } else {
+      currentStatusError = currentStatusResponse.reason;
+    }
+    if (!currentStatusUpdated && state.currentStatuses[lottery]) {
+      state.currentStatuses[lottery] = { ...state.currentStatuses[lottery], source: 'cache' };
+    }
+
+    const failedDataset = responses.slice(0, 3).find((response) => response.status === 'rejected');
+    if (failedDataset) throw failedDataset.reason;
+    const [numbers, summary, status] = responses.map((response) => response.value);
     const bundle = validateApiBundle(lottery, { numbers, summary, status }, {
       source: 'network',
       receivedAt: new Date().toISOString(),
     });
-    if (state.requests[lottery] !== requestId) return;
     state.bundles[lottery] = bundle;
-    state.load[lottery] = { loading: false, error: null };
+    state.load[lottery] = { loading: false, error: null, currentStatusError };
     if (localStorageHandle) writeApiCache(localStorageHandle, bundle);
     populateYearInput();
     renderAll();
     if (options.announce) {
-      toast(bundle.drawYear === state.yearByLottery[lottery]
+      toast(
+        bundle.drawYear === state.yearByLottery[lottery]
+          || (currentStatusUpdated
+            && state.currentStatuses[lottery]?.drawYear === state.yearByLottery[lottery])
         ? 'Datos actualizados'
-        : `El servidor todavía ofrece el sorteo de ${bundle.drawYear}`);
+        : `El servidor todavía ofrece el sorteo de ${bundle.drawYear}`,
+      );
     }
   } catch (error) {
     if (state.requests[lottery] !== requestId) return;
     console.warn(`Could not update ${lottery}`, error);
     if (state.bundles[lottery]) state.bundles[lottery] = { ...state.bundles[lottery], source: 'cache' };
-    state.load[lottery] = { loading: false, error };
+    state.load[lottery] = { loading: false, error, currentStatusError };
     renderAll();
     if (options.announce || lottery === state.lottery) {
       toast('No se pudo actualizar. Tus décimos siguen guardados.');
@@ -448,7 +488,7 @@ function deleteVisibleTickets() {
 }
 
 function showTicketResult(ticket) {
-  const result = evaluateTicket(ticket, state.bundles[ticket.lottery]);
+  const result = ticketResult(ticket);
   const container = byId('searchResult');
   if (container) {
     const card = element('div', { className: `result-card ${result.kind}` }, [
@@ -520,7 +560,7 @@ function renderHistory() {
 }
 
 function renderTicket(ticket) {
-  const result = evaluateTicket(ticket, state.bundles[ticket.lottery]);
+  const result = ticketResult(ticket);
   const main = element('div', { className: 'ticket-content' }, [
     element('div', { className: 'number-main', text: ticket.number }),
   ]);
@@ -559,14 +599,14 @@ function renderPortfolioSummary() {
   const tickets = state.tickets.filter((ticket) => ticket.lottery === state.lottery && ticket.drawYear === selectedYear());
   const staked = tickets.reduce((sum, ticket) => sum + ticket.stakeCents, 0);
   const estimated = tickets.reduce((sum, ticket) => {
-    const result = evaluateTicket(ticket, state.bundles[ticket.lottery]);
+    const result = ticketResult(ticket);
     return sum + (result.prize?.estimatedPrizeCents ?? 0);
   }, 0);
   if (!tickets.length) {
     container.replaceChildren();
     return;
   }
-  const results = tickets.map((ticket) => evaluateTicket(ticket, state.bundles[ticket.lottery]));
+  const results = tickets.map(ticketResult);
   const winners = results.filter((result) => result.kind === 'winner').length;
   const unresolved = results.filter((result) => (
     ['unavailable', 'pending', 'provisional-none', 'needs-year', 'needs-review'].includes(result.kind)
@@ -589,18 +629,44 @@ function portfolioMetric(value, label) {
 function renderSummary() {
   const container = byId('summaryList');
   if (!container) return;
-  const bundle = state.bundles[state.lottery];
-  if (!bundle) {
-    container.replaceChildren(element('div', { className: 'empty-state', text: 'No hay un resumen válido disponible.' }));
-    return;
-  }
-  if (bundle.drawYear !== selectedYear()) {
+  const availability = resolveDrawAvailability(
+    state.lottery,
+    selectedYear(),
+    state.bundles[state.lottery],
+    state.currentStatuses[state.lottery],
+  );
+  if (availability.kind === 'not-started') {
     container.replaceChildren(element('div', {
-      className: 'empty-state unavailable',
-      text: `No hay resumen de ${selectedYear()}. El servidor todavía ofrece el sorteo de ${bundle.drawYear}.`,
+      className: 'empty-state',
+      text: availability.message,
     }));
     return;
   }
+  if (availability.kind === 'stale-not-started') {
+    container.replaceChildren(element('div', {
+      className: 'empty-state unavailable',
+      text: 'La fecha del sorteo ya ha pasado y el estado todavía no se ha actualizado. No se mostrarán conclusiones.',
+    }));
+    return;
+  }
+  if (availability.kind === 'awaiting-results') {
+    container.replaceChildren(element('div', {
+      className: 'empty-state',
+      text: 'El sorteo está en curso o finalizado. Esperando una lista de premios válida.',
+    }));
+    return;
+  }
+  if (availability.kind !== 'results') {
+    const offeredYear = state.bundles[state.lottery]?.drawYear;
+    container.replaceChildren(element('div', {
+      className: `empty-state${offeredYear ? ' unavailable' : ''}`,
+      text: offeredYear
+        ? `No hay resumen de ${selectedYear()}. El servidor todavía ofrece el sorteo de ${offeredYear}.`
+        : 'No hay un resumen válido disponible.',
+    }));
+    return;
+  }
+  const bundle = availability.bundle;
   const items = bundle.summary.map((item, index) => {
     const display = item.value === -1 ? 'Pendiente' : String(item.value).padStart(item.digits, '0');
     return element('article', { className: `summary-item ${index < 3 ? 'major' : ''}` }, [
@@ -617,38 +683,73 @@ function renderStatus() {
   const dot = byId('statusDot');
   if (!title || !message || !dot) return;
   const bundle = state.bundles[state.lottery];
+  const currentStatus = state.currentStatuses[state.lottery];
   const load = state.load[state.lottery];
   dot.className = 'status-dot';
-  if (!bundle) {
-    title.textContent = load.loading ? 'Consultando…' : 'Servidor no disponible';
-    message.textContent = load.loading
-      ? 'Estamos comprobando la lista del sorteo.'
-      : load.error instanceof ValidationError
-        ? 'El servidor respondió con datos incoherentes y no se usarán para decidir si un décimo tiene premio.'
-        : 'No se puede comprobar ningún resultado ahora. Tus décimos siguen guardados.';
+  const availability = resolveDrawAvailability(
+    state.lottery,
+    selectedYear(),
+    bundle,
+    currentStatus,
+  );
+  if (availability.kind === 'not-started') {
+    title.textContent = 'Todavía no ha empezado';
+    message.textContent = availability.message;
     return;
   }
-  if (bundle.drawYear !== selectedYear()) {
-    title.textContent = `Sin datos de ${selectedYear()}`;
-    message.textContent = `El servidor ofrece ${bundle.drawYear}. No mezclamos resultados de años distintos.`;
+  if (availability.kind === 'stale-not-started') {
+    title.textContent = 'Estado pendiente de actualización';
+    message.textContent = 'La fecha prevista del sorteo ya ha pasado. No se usará el estado «no comenzado» para decidir resultados.';
     dot.classList.add('unavailable');
     return;
   }
-  const [statusTitle, statusMessage] = STATUS_COPY[bundle.status];
+  if (availability.kind === 'awaiting-results') {
+    title.textContent = 'Resultados actualizándose';
+    message.textContent = 'El sorteo ya está en curso o finalizado, pero todavía no hay una lista de premios válida.';
+    dot.classList.add(availability.status === 1 ? 'live' : 'unavailable');
+    return;
+  }
+  if (availability.kind !== 'results') {
+    title.textContent = load.loading
+      ? 'Consultando…'
+      : bundle
+        ? `Sin datos de ${selectedYear()}`
+        : 'Servidor no disponible';
+    message.textContent = load.loading
+      ? 'Estamos comprobando la lista del sorteo.'
+      : bundle
+        ? `El servidor ofrece ${bundle.drawYear}. No mezclamos resultados de años distintos.`
+      : load.error instanceof ValidationError
+        ? 'El servidor respondió con datos incoherentes y no se usarán para decidir si un décimo tiene premio.'
+        : 'No se puede comprobar ningún resultado ahora. Tus décimos siguen guardados.';
+    if (bundle) dot.classList.add('unavailable');
+    return;
+  }
+  const activeBundle = availability.bundle;
+  const [statusTitle, statusMessage] = STATUS_COPY[activeBundle.status];
   title.textContent = statusTitle;
   message.textContent = `${statusMessage}${load.error ? ' Se muestra la última copia válida guardada.' : ''}`;
-  if (bundle.status === 1) dot.classList.add('live');
-  if (bundle.status >= 3) dot.classList.add('done');
+  if (activeBundle.status === 1) dot.classList.add('live');
+  if (activeBundle.status >= 3) dot.classList.add('done');
 }
 
 function renderFreshness() {
   const target = byId('dataFreshness');
   if (!target) return;
   const bundle = state.bundles[state.lottery];
+  const currentStatus = state.currentStatuses[state.lottery];
   const load = state.load[state.lottery];
   if (load.loading) {
     target.textContent = 'Actualizando resultados…';
     target.dataset.state = 'loading';
+  } else if (bundle?.drawYear === selectedYear()) {
+    const received = new Intl.DateTimeFormat('es-ES', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(bundle.receivedAt));
+    target.textContent = `${bundle.source === 'cache' ? 'Copia local' : 'Actualizado'} · ${received}`;
+    target.dataset.state = bundle.source === 'cache' ? 'cached' : 'fresh';
+  } else if (currentStatus?.drawYear === selectedYear()) {
+    const received = new Intl.DateTimeFormat('es-ES', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(currentStatus.receivedAt));
+    target.textContent = `${currentStatus.source === 'cache' ? 'Último estado válido' : `Estado ${currentStatus.drawYear} actualizado`} · ${received}`;
+    target.dataset.state = currentStatus.source === 'cache' ? 'cached' : 'fresh';
   } else if (!bundle) {
     target.textContent = load.error instanceof ValidationError
       ? `Datos rechazados · ${load.error.message}`
@@ -657,10 +758,6 @@ function renderFreshness() {
   } else if (bundle.drawYear !== selectedYear()) {
     target.textContent = `Datos disponibles: ${bundle.drawYear} · seleccionaste ${selectedYear()}`;
     target.dataset.state = 'stale';
-  } else {
-    const received = new Intl.DateTimeFormat('es-ES', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(bundle.receivedAt));
-    target.textContent = `${bundle.source === 'cache' ? 'Copia local' : 'Actualizado'} · ${received}`;
-    target.dataset.state = bundle.source === 'cache' ? 'cached' : 'fresh';
   }
 }
 

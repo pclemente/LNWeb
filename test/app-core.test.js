@@ -15,7 +15,9 @@ import {
   parseBackupPayload,
   parseEuroToCents,
   readApiCache,
+  resolveDrawAvailability,
   validateApiBundle,
+  validateCurrentStatus,
   writeApiCache,
 } from '../app-core.js';
 
@@ -51,6 +53,7 @@ function summaryFor(lottery, overrides = {}) {
     return {
       timestamp: 1797930000,
       status: 4,
+      year: 2026,
       error: 0,
       ...Object.fromEntries(Array.from({ length: 13 }, (_, index) => [`numero${index + 1}`, 123 + index])),
       ...overrides,
@@ -59,6 +62,7 @@ function summaryFor(lottery, overrides = {}) {
   return {
     timestamp: 1767777412,
     status: 4,
+    year: 2026,
     error: 0,
     Primer_premio: 6703,
     Segundo_Premio: 45875,
@@ -73,13 +77,32 @@ function summaryFor(lottery, overrides = {}) {
 
 function bundleInput(lottery = 'navidad', overrides = {}) {
   const status = overrides.statusCode ?? 4;
+  const drawYear = overrides.drawYear ?? 2026;
   const defaultNumbers = lottery === 'navidad'
     ? Object.fromEntries(Array.from({ length: 13 }, (_, index) => [String(123 + index), String(index === 0 ? 4_000_000 : 60_000)]))
     : { '06703': '2000000', '45875': '750000', '32615': '250000' };
   return {
-    numbers: { status: String(status), ...defaultNumbers, '42': '200', ...(overrides.numbers || {}) },
-    summary: summaryFor(lottery, { status, ...(overrides.summary || {}) }),
-    status: { status, error: 0, ...(overrides.status || {}) },
+    numbers: {
+      status: String(status), year: String(drawYear), ...defaultNumbers, '42': '200', ...(overrides.numbers || {}),
+    },
+    summary: summaryFor(lottery, { status, year: drawYear, ...(overrides.summary || {}) }),
+    status: { status, year: drawYear, error: 0, ...(overrides.status || {}) },
+  };
+}
+
+function currentStatusInput(lottery = 'navidad', overrides = {}) {
+  const drawYear = overrides.year ?? (lottery === 'navidad' ? 2026 : 2027);
+  return {
+    year: drawYear,
+    status: 0,
+    state: 'not_started',
+    message: 'El sorteo aún no ha comenzado.',
+    drawDate: lottery === 'navidad'
+      ? `${drawYear}-12-22T09:00:00+01:00`
+      : `${drawYear}-01-06T12:00:00+01:00`,
+    timezone: 'Europe/Madrid',
+    error: 0,
+    ...overrides,
   };
 }
 
@@ -305,16 +328,104 @@ test('an unrecoverable local document is quarantined before a new one can replac
   assert.match(repository.warnings[0], /conservó/);
 });
 
-test('API validation canonicalizes unpadded number keys and rejects inconsistent status', () => {
+test('API validation accepts matching year metadata and canonicalizes unpadded number keys', () => {
   const bundle = validateApiBundle('navidad', bundleInput(), {
     source: 'network', receivedAt: fixedNow.toISOString(),
   });
   assert.equal(bundle.drawYear, 2026);
   assert.equal(bundle.prizes['00042'], 2000);
   assert.equal(bundle.prizes['00123'], 40_000_000);
+  assert.equal(Object.hasOwn(bundle.prizes, '02026'), false);
   assert.throws(() => validateApiBundle('navidad', bundleInput('navidad', {
     status: { status: 1 },
   })), /misma actualización/);
+});
+
+test('API validation preserves legacy payloads but rejects partial or conflicting year metadata', () => {
+  const legacy = bundleInput();
+  delete legacy.numbers.year;
+  delete legacy.summary.year;
+  delete legacy.status.year;
+  assert.equal(validateApiBundle('navidad', legacy).drawYear, 2026);
+
+  const partial = bundleInput();
+  delete partial.status.year;
+  assert.throws(() => validateApiBundle('navidad', partial), /mismo año/);
+  assert.throws(() => validateApiBundle('navidad', bundleInput('navidad', {
+    numbers: { year: '2027' },
+  })), /no corresponde a la fecha/);
+  assert.throws(() => validateApiBundle('navidad', bundleInput('navidad', {
+    summary: { year: 2027 },
+  })), /no corresponde a la fecha/);
+});
+
+test('current status validation requires the published year, date, timezone, and error contract', () => {
+  const status = validateCurrentStatus('navidad', currentStatusInput(), {
+    receivedAt: fixedNow.toISOString(),
+  });
+  assert.equal(status.drawYear, 2026);
+  assert.equal(status.status, 0);
+  assert.equal(status.message, 'El sorteo aún no ha comenzado.');
+  const ninoStatus = validateCurrentStatus('nino', currentStatusInput('nino'));
+  assert.equal(ninoStatus.drawYear, 2027);
+  assert.equal(evaluateTicket({
+    id: 'nino-2027', lottery: 'nino', drawYear: 2027, number: '00001', stakeCents: 2000,
+    note: '', createdAt: fixedNow.toISOString(), updatedAt: fixedNow.toISOString(),
+  }, null, { currentStatus: ninoStatus, now: fixedNow }).kind, 'pending');
+  assert.throws(() => validateCurrentStatus('navidad', currentStatusInput('navidad', {
+    error: 1,
+  })), /error del servidor/);
+  assert.throws(() => validateCurrentStatus('navidad', currentStatusInput('navidad', {
+    drawDate: '2026-12-23T09:00:00+01:00',
+  })), /no corresponde/);
+  assert.throws(() => validateCurrentStatus('nino', currentStatusInput('nino', {
+    timezone: 'UTC',
+  })), /zona horaria/);
+});
+
+test('current not-started status keeps its year pending without hiding historical or published results', () => {
+  const currentStatus = validateCurrentStatus('navidad', currentStatusInput(), {
+    receivedAt: fixedNow.toISOString(),
+  });
+  const historical = validateApiBundle('navidad', bundleInput('navidad', {
+    drawYear: 2025,
+    summary: { timestamp: 1766414850 },
+  }), { receivedAt: fixedNow.toISOString() });
+  const historicalTicket = {
+    id: 'historical', lottery: 'navidad', drawYear: 2025, number: '00099', stakeCents: 2000,
+    note: '', createdAt: fixedNow.toISOString(), updatedAt: fixedNow.toISOString(),
+  };
+  const currentTicket = { ...historicalTicket, id: 'current', drawYear: 2026 };
+
+  assert.equal(evaluateTicket(historicalTicket, historical, {
+    currentStatus, now: fixedNow,
+  }).kind, 'not-winner');
+  const pending = evaluateTicket(currentTicket, historical, { currentStatus, now: fixedNow });
+  assert.equal(pending.kind, 'pending');
+  assert.match(pending.message, /aún no ha comenzado/);
+
+  const afterDraw = new Date('2026-12-22T08:00:01.000Z');
+  assert.equal(evaluateTicket(currentTicket, historical, {
+    currentStatus, now: afterDraw,
+  }).kind, 'unavailable');
+
+  const published = validateApiBundle('navidad', bundleInput(), {
+    receivedAt: fixedNow.toISOString(),
+  });
+  assert.equal(evaluateTicket({ ...currentTicket, number: '00042' }, published, {
+    currentStatus, now: fixedNow,
+  }).kind, 'winner');
+});
+
+test('an old current-status response cannot describe a different draw as not started', () => {
+  const oldStatus = validateCurrentStatus('navidad', currentStatusInput('navidad', {
+    year: 2025,
+    drawDate: '2025-12-22T09:00:00+01:00',
+  }));
+  const availability = resolveDrawAvailability('navidad', 2026, null, oldStatus, {
+    now: fixedNow,
+  });
+  assert.equal(availability.kind, 'unavailable');
 });
 
 test('API validation rejects a summary winner missing from the detailed list', () => {
@@ -325,7 +436,7 @@ test('API validation rejects a summary winner missing from the detailed list', (
 
 test('API validation rejects an empty final list even if its summary looks valid', () => {
   const empty = bundleInput('navidad');
-  empty.numbers = { status: '4' };
+  empty.numbers = { status: '4', year: '2026' };
   assert.throws(() => validateApiBundle('navidad', empty), /aparece en el resumen.*falta/);
 });
 
